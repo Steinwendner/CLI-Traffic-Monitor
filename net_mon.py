@@ -1,6 +1,8 @@
 import time
 import psutil
 import argparse
+import os
+import re
 
 
 def main():
@@ -10,6 +12,27 @@ def main():
     parser.add_argument("-p", "--path", help="record the the monitored traffic usage")
     parser.add_argument("-s", "--silent", help="no continuous output to the console", action="store_true")
     arguments = parser.parse_args()
+
+    path_to_recordings = None
+    path_to_current_log = None
+
+    # setup recording dir if -r is given
+    if arguments.record:
+        path_to_recordings = os.path.expanduser("~/.network_traffic")
+        try:
+            os.mkdir(path_to_recordings)
+        except FileExistsError:
+            # directory already exists
+            pass
+
+        # get a list of all files in the folder
+        # file count starts with 0
+        # first file: tm_0.log, second file: tm_1.log
+        only_tm_files = list()
+        for f in os.listdir(path_to_recordings):
+            if os.path.isfile(os.path.join(path_to_recordings, f)) and f.startswith("tm_"):
+                only_tm_files.append(f)
+        path_to_current_log = os.path.join(path_to_recordings, "tm_{}.log".format(len(only_tm_files)))
 
     interval = 1  # time between readings in seconds
     last_down = 0
@@ -23,9 +46,10 @@ def main():
         if last_down or last_up:
             counted_bytes = (current_down - last_down, current_up - last_up)
             if not arguments.silent:
-                push_bytes(counted_bytes, interval)
+                print_traffic(counted_bytes, interval)
             if arguments.record:
-                pass
+                with open(path_to_current_log, "a+", encoding="utf-8") as f:
+                    f.write("{} {} {}\n".format(int(time.time()), counted_bytes[0], counted_bytes[1]))
 
         # set current readings to be the latest
         last_down = current_down
@@ -35,7 +59,7 @@ def main():
         time.sleep(interval)
 
 
-def push_bytes(counted, interval):
+def print_traffic(counted, interval):
     """
     Prints the current network usage to the console.
 
