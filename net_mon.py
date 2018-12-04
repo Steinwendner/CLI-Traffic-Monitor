@@ -2,19 +2,19 @@ import time
 import psutil
 import argparse
 import os
-import re
 
 
 def main():
     # setup the argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--record", help="record the the monitored traffic usage", action="store_true")
-    parser.add_argument("-p", "--path", help="record the the monitored traffic usage")
     parser.add_argument("-s", "--silent", help="no continuous output to the console", action="store_true")
     arguments = parser.parse_args()
 
     path_to_recordings = None
     path_to_current_log = None
+
+    record_queue = None
 
     # setup recording dir if -r is given
     if arguments.record:
@@ -33,7 +33,7 @@ def main():
             if os.path.isfile(os.path.join(path_to_recordings, f)) and f.startswith("tm_"):
                 only_tm_files.append(f)
         path_to_current_log = os.path.join(path_to_recordings, "tm_{}.log".format(len(only_tm_files)))
-
+        record_queue = list()
     interval = 1  # time between readings in seconds
     last_down = 0
     last_up = 0
@@ -48,8 +48,12 @@ def main():
             if not arguments.silent:
                 print_traffic(counted_bytes, interval)
             if arguments.record:
-                with open(path_to_current_log, "a+", encoding="utf-8") as f:
-                    f.write("{} {} {}\n".format(int(time.time()), counted_bytes[0], counted_bytes[1]))
+                record_queue.append("{} {} {}\n".format(int(time.time()), counted_bytes[0], counted_bytes[1]))
+                if len(record_queue) >= 30:
+                    with open(path_to_current_log, "a+", encoding="utf-8") as f:
+                        for r in record_queue:
+                            f.write(r)
+                    record_queue.clear()
 
         # set current readings to be the latest
         last_down = current_down
